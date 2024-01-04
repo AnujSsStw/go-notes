@@ -1,8 +1,9 @@
 package server
 
 import (
-	"github.com/gofiber/fiber/v2"
 	"go-notes/internal/database"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type FiberServer struct {
