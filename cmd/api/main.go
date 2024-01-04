@@ -13,8 +13,7 @@ func main() {
 
 	server := server.New()
 
-	api := server.Group("/api")
-	server.RegisterFiberRoutes(api)
+	server.RegisterFiberRoutes()
 	// server.Use(limiter.New(limiter.Config{
 	// 	Max:               20,
 	// 	Expiration:        30 * time.Second,

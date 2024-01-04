@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	in "go-notes/internal"
@@ -20,6 +21,10 @@ type Service interface {
 	Health() map[string]string
 	RetriveUser(*in.User) (*in.User, error)
 	CreateUser(*in.User) error
+	ValidateApiKey(string) (*in.User, error)
+	CreateNote(*in.Note) error
+	GetNotes(string) ([]*in.Note, error)
+	GetNote(string, string) (*in.Note, error)
 }
 
 type service struct {
@@ -44,6 +49,83 @@ func New() Service {
 	s := &service{db: db}
 	s.CreateTable()
 	return s
+}
+
+func (s *service) GetNote(userId, noteId string) (*in.Note, error) {
+	query := `
+	SELECT notes.id AS note_id, notes.title, notes.text, notes.created_at
+	FROM notes
+	JOIN users ON notes.user_id = users.id
+	WHERE notes.user_id = $1 AND notes.id = $2;`
+
+	id, _ := strconv.Atoi(noteId)
+	rows, err := s.db.Query(query, userId, id)
+	if err != nil {
+		return nil, err
+	}
+
+	note := new(in.Note)
+	for rows.Next() {
+		if err := rows.Scan(&note.Id, &note.Title, &note.Text, &note.CreatedAt); err != nil {
+			return nil, err
+		}
+	}
+	return note, nil
+}
+
+func (s *service) GetNotes(userId string) ([]*in.Note, error) {
+	query := `
+	SELECT notes.id AS note_id, notes.title, notes.text, notes.created_at
+	FROM notes
+	JOIN users ON notes.user_id = users.id
+	WHERE notes.user_id = $1;`
+
+	rows, err := s.db.Query(query, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	notes := []*in.Note{}
+	for rows.Next() {
+		note := new(in.Note)
+		if err := rows.Scan(&note.Id, &note.Title, &note.Text, &note.CreatedAt); err != nil {
+			return nil, err
+		}
+		notes = append(notes, note)
+	}
+	return notes, nil
+}
+
+func (s *service) CreateNote(n *in.Note) error {
+	query := "INSERT INTO notes (user_id, title, text) VALUES ($1, $2, $3)"
+	_, err := s.db.Query(query, n.UserId, n.Title, n.Text)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *service) ValidateApiKey(u string) (*in.User, error) {
+	query := `SELECT *
+	FROM users
+	WHERE api_key = $1;`
+	rows, err := s.db.Query(
+		query,
+		u)
+
+	if err != nil {
+		return nil, err
+	}
+
+	user := new(in.User)
+	for rows.Next() {
+		if err := rows.Scan(&user.Id, &user.Username, &user.Password, &user.CreatedAt, &user.ApiKey); err != nil {
+			return nil, err
+		}
+	}
+
+	return user, nil
 }
 
 func (s *service) CreateUser(u *in.User) error {
@@ -117,8 +199,8 @@ func (s *service) CreateTable() {
 	noteTable := `CREATE TABLE IF NOT EXISTS notes (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id),
-	note_title TEXT,
-    note_text TEXT,
+	title TEXT,
+    text TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
 

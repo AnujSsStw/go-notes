@@ -1,27 +1,57 @@
 package server
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	in "go-notes/internal"
+	"log"
+	"regexp"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/keyauth"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *FiberServer) RegisterFiberRoutes(api fiber.Router) {
+var protectedURLs = []*regexp.Regexp{
+	regexp.MustCompile("^/api/notes(/.*)?"),
+	regexp.MustCompile("^/api/search(/.*)?"),
+}
+
+func authFilter(c *fiber.Ctx) bool {
+	originalURL := strings.ToLower(c.OriginalURL())
+
+	for _, pattern := range protectedURLs {
+		if pattern.MatchString(originalURL) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *FiberServer) RegisterFiberRoutes() {
 	s.App.Get("/", s.HelloWorldHandler)
 	s.App.Get("/health", s.healthHandler)
+	authMiddleware := keyauth.New(keyauth.Config{
+		Next: authFilter,
+		Validator: func(c *fiber.Ctx, key string) (bool, error) {
+			user, err := s.db.ValidateApiKey(key)
+			c.Locals("user", user.Id)
+			if err != nil {
+				log.Println(err)
+				return false, keyauth.ErrMissingOrMalformedAPIKey
+			}
+			hashedAPIKey := sha256.Sum256([]byte(user.ApiKey))
+			hashedKey := sha256.Sum256([]byte(key))
 
-	// authMiddleware := keyauth.New(keyauth.Config{
-	// 	Validator: func(c *fiber.Ctx, key string) (bool, error) {
-	// 		hashedAPIKey := sha256.Sum256([]byte(apiKey))
-	// 		hashedKey := sha256.Sum256([]byte(key))
+			if subtle.ConstantTimeCompare(hashedAPIKey[:], hashedKey[:]) == 1 {
+				return true, nil
+			}
+			return false, keyauth.ErrMissingOrMalformedAPIKey
+		},
+	})
 
-	// 		if subtle.ConstantTimeCompare(hashedAPIKey[:], hashedKey[:]) == 1 {
-	// 			return true, nil
-	// 		}
-	// 		return false, keyauth.ErrMissingOrMalformedAPIKey
-	// 	},
-	// })
+	api := s.App.Group("/api", authMiddleware)
 
 	// POST /api/auth/CreateUser: create a new user account.
 	// POST /api/auth/login: log in to an existing user account and receive an access token.
@@ -35,17 +65,47 @@ func (s *FiberServer) RegisterFiberRoutes(api fiber.Router) {
 	// DELETE /api/notes/:id: delete a note by ID for the authenticated user.
 	// POST /api/notes/:id/share: share a note with another user for the authenticated user.
 	// GET /api/search?q=:query: search for notes based on keywords for the authenticated user.
-	/*
-		api.Get("/notes")
-		api.Get("/notes/:id")
-		api.Post("/notes")
-		api.Put("/notes/:id")
-		api.Delete("/notes/:id")
-		api.Post("/notes/:id/share")
-		api.Get("/search")
-	*/
+
+	api.Get("/notes", s.getNotes)
+	api.Get("/notes/:id", s.getNote)
+	api.Post("/notes", s.createNote)
+	api.Put("/notes/:id", s.updateNote)
+	api.Delete("/notes/:id", s.deleteNote)
+	api.Post("/notes/:id/share", s.shareNote)
+	api.Get("/search", s.searchNote)
 
 }
+
+func (s *FiberServer) getNotes(c *fiber.Ctx) error {
+	if notes, err := s.db.GetNotes(c.Locals("user").(string)); err != nil {
+		return err
+	} else {
+		return c.JSON(notes)
+	}
+}
+func (s *FiberServer) getNote(c *fiber.Ctx) error {
+	if note, err := s.db.GetNote(c.Locals("user").(string), c.Params("id")); err != nil {
+		return err
+	} else {
+		return c.JSON(note)
+	}
+}
+func (s *FiberServer) createNote(c *fiber.Ctx) error {
+	n := new(in.Note)
+	if err := c.BodyParser(n); err != nil {
+		return err
+	}
+	n.UserId = c.Locals("user").(string)
+	if err := s.db.CreateNote(n); err != nil {
+		return err
+	}
+
+	return c.JSON("created")
+}
+func (s *FiberServer) updateNote(c *fiber.Ctx) error { return c.JSON("ok") }
+func (s *FiberServer) deleteNote(c *fiber.Ctx) error { return c.JSON("ok") }
+func (s *FiberServer) shareNote(c *fiber.Ctx) error  { return c.JSON("s") }
+func (s *FiberServer) searchNote(c *fiber.Ctx) error { return c.JSON("ok") }
 
 func (s *FiberServer) CreateUser(c *fiber.Ctx) error {
 	u := new(in.User)
