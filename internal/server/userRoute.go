@@ -33,6 +33,7 @@ func (s *FiberServer) CreateUser(c *fiber.Ctx) error {
 	u.ApiKey = apikey
 
 	if err := s.db.CreateUser(u); err != nil {
+		c.Status(fiber.StatusBadRequest)
 		return c.JSON(map[string]string{
 			"message": "username already exist. Try different username",
 		})
@@ -49,6 +50,7 @@ func (s *FiberServer) login(c *fiber.Ctx) error {
 		return err
 	}
 	if user, err := s.db.RetriveUser(u); err != nil {
+		c.Status(fiber.StatusBadRequest)
 		return c.JSON(map[string]string{
 			"error": err.Error(),
 		})

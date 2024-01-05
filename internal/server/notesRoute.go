@@ -24,7 +24,9 @@ func (s *FiberServer) getNotes(c *fiber.Ctx) error {
 
 func (s *FiberServer) getNote(c *fiber.Ctx) error {
 	if note, err := s.db.GetNote(c.Locals("user").(string), c.Params("id")); err != nil {
-		return err
+		return c.JSON(map[string]string{
+			"error msg": err.Error(),
+		})
 	} else {
 		return c.JSON(note)
 	}
@@ -34,6 +36,9 @@ func (s *FiberServer) createNote(c *fiber.Ctx) error {
 	n := new(in.Note)
 	if err := c.BodyParser(n); err != nil {
 		return err
+	}
+	if len(n.Text) < 3 || len(n.Title) < 3 {
+		return c.Status(fiber.StatusBadRequest).SendString("make good notes")
 	}
 	n.UserId = c.Locals("user").(string)
 	if err := s.db.CreateNote(n); err != nil {

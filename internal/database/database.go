@@ -81,6 +81,11 @@ func (s *service) SearchNote(userId, q string) ([]*in.Note, error) {
 
 func (s *service) UpdateNote(userId, noteId, flag string, note *in.Note) error {
 	var query string
+	// does note with noteid exist for that user
+	if _, err := s.GetNote(userId, noteId); err != nil {
+		return err
+	}
+
 	switch flag {
 	case "BOTH":
 		query = "UPDATE notes SET text = $1, title = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4;"
@@ -145,7 +150,7 @@ func (s *service) GetNote(userId, noteId string) (*in.Note, error) {
 	switch err {
 	case sql.ErrNoRows:
 
-		return nil, errors.New("no row found")
+		return nil, errors.New("no note found")
 	case nil:
 		return note, nil
 	default:
