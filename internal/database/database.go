@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	in "go-notes/internal"
@@ -25,6 +24,10 @@ type Service interface {
 	CreateNote(*in.Note) error
 	GetNotes(string) ([]*in.Note, error)
 	GetNote(string, string) (*in.Note, error)
+	SetPrivacy(string, string) error
+	DeleteNote(string, string) error
+	GetNoteById(string) (*in.Note, error)
+	UpdateNote(string, string, string, *in.Note) error
 }
 
 type service struct {
@@ -51,6 +54,60 @@ func New() Service {
 	return s
 }
 
+func (s *service) UpdateNote(userId, noteId, flag string, note *in.Note) error {
+	var query string
+	switch flag {
+	case "BOTH":
+		query = "UPDATE notes SET text = $1, title = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4;"
+		_, err := s.db.Query(query, note.Text, note.Title, noteId, userId)
+		return err
+	case "TEXT":
+		query = "UPDATE notes SET text = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3;"
+		_, err := s.db.Query(query, note.Text, noteId, userId)
+		return err
+	case "TITLE":
+		query = "UPDATE notes SET title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3;"
+		_, err := s.db.Query(query, note.Title, noteId, userId)
+		return err
+	default:
+		return errors.New("FLag not set properly means not updating anything")
+	}
+}
+
+func (s *service) DeleteNote(noteId, userId string) error {
+	query := `DELETE FROM notes WHERE user_id = $1 AND id = $2;`
+	_, err := s.db.Query(query, userId, noteId)
+	return err
+}
+
+func (s *service) SetPrivacy(noteId, userId string) error {
+	query := `UPDATE notes
+	SET is_private = NOT is_private
+	WHERE user_id = $1 AND id = $2;`
+
+	_, err := s.db.Query(query, userId, noteId)
+	return err
+}
+
+func (s *service) GetNoteById(noteId string) (*in.Note, error) {
+	query := `
+		SELECT notes.id AS note_id, notes.title, notes.text, notes.created_at, notes.updated_at
+		FROM notes
+		JOIN users ON notes.user_id = users.id
+		WHERE notes.is_private = FALSE AND notes.id = $1;`
+	note := new(in.Note)
+	err := s.db.QueryRow(query, noteId).Scan(&note.Id, &note.Title, &note.Text, &note.CreatedAt, &note.UpdatedAt)
+
+	switch err {
+	case sql.ErrNoRows:
+		return nil, errors.New("no note found")
+	case nil:
+		return note, nil
+	default:
+		return nil, err
+	}
+}
+
 func (s *service) GetNote(userId, noteId string) (*in.Note, error) {
 	query := `
 	SELECT notes.id AS note_id, notes.title, notes.text, notes.created_at
@@ -58,19 +115,17 @@ func (s *service) GetNote(userId, noteId string) (*in.Note, error) {
 	JOIN users ON notes.user_id = users.id
 	WHERE notes.user_id = $1 AND notes.id = $2;`
 
-	id, _ := strconv.Atoi(noteId)
-	rows, err := s.db.Query(query, userId, id)
-	if err != nil {
+	note := new(in.Note)
+	err := s.db.QueryRow(query, userId, noteId).Scan(&note.Id, &note.Title, &note.Text, &note.CreatedAt)
+	switch err {
+	case sql.ErrNoRows:
+
+		return nil, errors.New("no row found")
+	case nil:
+		return note, nil
+	default:
 		return nil, err
 	}
-
-	note := new(in.Note)
-	for rows.Next() {
-		if err := rows.Scan(&note.Id, &note.Title, &note.Text, &note.CreatedAt); err != nil {
-			return nil, err
-		}
-	}
-	return note, nil
 }
 
 func (s *service) GetNotes(userId string) ([]*in.Note, error) {
@@ -99,11 +154,7 @@ func (s *service) GetNotes(userId string) ([]*in.Note, error) {
 func (s *service) CreateNote(n *in.Note) error {
 	query := "INSERT INTO notes (user_id, title, text) VALUES ($1, $2, $3)"
 	_, err := s.db.Query(query, n.UserId, n.Title, n.Text)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (s *service) ValidateApiKey(u string) (*in.User, error) {
@@ -143,6 +194,7 @@ func (s *service) CreateUser(u *in.User) error {
 
 	return nil
 }
+
 func (s *service) RetriveUser(u *in.User) (*in.User, error) {
 	query := `SELECT *
 	FROM users
@@ -201,7 +253,9 @@ func (s *service) CreateTable() {
     user_id INT REFERENCES users(id),
 	title TEXT,
     text TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	is_private BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
 
 	if _, err := s.db.Exec(userTable); err != nil {

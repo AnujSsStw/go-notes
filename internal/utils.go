@@ -19,6 +19,7 @@ type Note struct {
 	Title     string `json:"title" form:"title"`
 	Text      string `json:"text" form:"text"`
 	CreatedAt string `json:"created_at" form:"created_at"`
+	UpdatedAt string `json:"updated_at" form:"updated_at"`
 }
 
 func GenerateRandomString(length int) (string, error) {
