@@ -28,6 +28,7 @@ type Service interface {
 	DeleteNote(string, string) error
 	GetNoteById(string) (*in.Note, error)
 	UpdateNote(string, string, string, *in.Note) error
+	SearchNote(string, string) ([]*in.Note, error)
 }
 
 type service struct {
@@ -52,6 +53,31 @@ func New() Service {
 	s := &service{db: db}
 	s.CreateTable()
 	return s
+}
+
+func (s *service) SearchNote(userId, q string) ([]*in.Note, error) {
+	query := `
+	SELECT notes.id AS note_id, notes.title, notes.text, notes.created_at, notes.updated_at
+	FROM notes
+	JOIN users ON notes.user_id = users.id
+	WHERE notes.user_id = $1 AND ts @@ to_tsquery('simple', $2)
+	ORDER BY ts_rank(ts, to_tsquery('simple', $2)) DESC;
+	`
+
+	rows, err := s.db.Query(query, userId, q)
+	if err != nil {
+		return nil, err
+	}
+
+	notes := []*in.Note{}
+	for rows.Next() {
+		note := new(in.Note)
+		if err := rows.Scan(&note.Id, &note.Title, &note.Text, &note.CreatedAt, &note.UpdatedAt); err != nil {
+			return nil, err
+		}
+		notes = append(notes, note)
+	}
+	return notes, nil
 }
 
 func (s *service) UpdateNote(userId, noteId, flag string, note *in.Note) error {
@@ -258,10 +284,28 @@ func (s *service) CreateTable() {
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
 
+	search := `DO $$ 
+	BEGIN 
+	  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notes' AND column_name = 'ts') THEN 
+	    ALTER TABLE notes ADD COLUMN ts tsvector 
+		GENERATED ALWAYS AS 
+     	(setweight(to_tsvector('english', coalesce(title, '')), 'A') || 
+		setweight(to_tsvector('english', coalesce(text, '')), 'B')) STORED;
+	  END IF; 
+	END $$;
+	`
+	idx := `CREATE INDEX IF NOT EXISTS ts_idx ON notes USING GIN (ts);`
+
 	if _, err := s.db.Exec(userTable); err != nil {
 		log.Fatalln("in user table", err)
 	}
 	if _, err := s.db.Exec(noteTable); err != nil {
 		log.Fatalln("in notes table", err)
+	}
+	if _, err := s.db.Exec(search); err != nil {
+		log.Fatalln("in user table", err)
+	}
+	if _, err := s.db.Exec(idx); err != nil {
+		log.Fatalln("in user table", err)
 	}
 }

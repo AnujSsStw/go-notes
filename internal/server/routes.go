@@ -75,6 +75,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	api.Post("/notes/:id/share", s.shareNote)
 	api.Get("/search", s.searchNote)
 
+	// to set the note public or private
 	api.Put("/notes/setPrivacy/:id", s.setPrivacy)
 
 }
@@ -151,7 +152,12 @@ func (s *FiberServer) shareNote(c *fiber.Ctx) error {
 	}
 }
 func (s *FiberServer) searchNote(c *fiber.Ctx) error {
-	return c.JSON("ok")
+	m := c.Queries()
+	if notes, err := s.db.SearchNote(c.Locals("user").(string), m["q"]+":*"); err != nil {
+		return err
+	} else {
+		return c.JSON(notes)
+	}
 }
 
 func (s *FiberServer) CreateUser(c *fiber.Ctx) error {
