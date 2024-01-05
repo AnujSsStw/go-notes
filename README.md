@@ -5,7 +5,7 @@ Secure and scalable RESTful API that allows users to create, read, update, and d
 ## Getting Started
 
 golang should be installed
-For api overview -> [Postman](https://interstellar-astronaut-117011.postman.co/workspace/My-Workspace~6eb59c5b-ee43-4d39-8212-b7c7c0f7c205/collection/20103509-452fa703-9f86-44b5-ad92-471ca7bd42b8?action=share&creator=20103509)
+For api overview -> [Postman](https://elements.getpostman.com/redirect?entityId=20103509-452fa703-9f86-44b5-ad92-471ca7bd42b8&entityType=collection)
 
 ## MakeFile
 
