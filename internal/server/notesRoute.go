@@ -71,9 +71,12 @@ func (s *FiberServer) updateNote(c *fiber.Ctx) error {
 
 func (s *FiberServer) deleteNote(c *fiber.Ctx) error {
 	if err := s.db.DeleteNote(c.Locals("user").(string), c.Params("id")); err != nil {
+		c.Status(fiber.StatusBadRequest)
 		return err
 	} else {
-		return c.JSON("Deleted")
+		return c.JSON(map[string]string{
+			"message": "Deleted",
+		})
 	}
 }
 

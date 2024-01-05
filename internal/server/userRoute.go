@@ -18,7 +18,7 @@ func (s *FiberServer) CreateUser(c *fiber.Ctx) error {
 		return err
 	}
 	u.Password = string(encpw)
-	apikey, err := in.GenerateRandomString(20)
+	apikey, err := in.GenerateRandomString(40)
 	if err != nil {
 		return err
 	}
@@ -26,10 +26,12 @@ func (s *FiberServer) CreateUser(c *fiber.Ctx) error {
 
 	if err := s.db.CreateUser(u); err != nil {
 		return c.JSON(map[string]string{
-			"message": "username already exist",
+			"message": "username already exist. Try different username",
 		})
 	}
-	return c.JSON(u.Username)
+	return c.JSON(map[string]string{
+		"message": "User created with username " + u.Username + ". Go to " + c.BaseURL() + "/api/auth/login to get the access token",
+	})
 }
 
 func (s *FiberServer) login(c *fiber.Ctx) error {
@@ -40,10 +42,11 @@ func (s *FiberServer) login(c *fiber.Ctx) error {
 	}
 	if user, err := s.db.RetriveUser(u); err != nil {
 		return c.JSON(map[string]string{
-			"message": "wrong username and password combo",
-			"error":   err.Error(),
+			"error": err.Error(),
 		})
 	} else {
-		return c.JSON(user.ApiKey)
+		return c.JSON(map[string]string{
+			"access Token": user.ApiKey,
+		})
 	}
 }
