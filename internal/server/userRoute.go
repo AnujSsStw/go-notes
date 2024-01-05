@@ -13,6 +13,14 @@ func (s *FiberServer) CreateUser(c *fiber.Ctx) error {
 	if err := c.BodyParser(u); err != nil {
 		return err
 	}
+
+	if len(u.Username) < 3 || len(u.Password) < 3 {
+		c.Status(fiber.StatusBadRequest)
+		return c.JSON(map[string]string{
+			"message": "Username and Password should be of length > 2",
+		})
+	}
+
 	encpw, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
